@@ -1,0 +1,118 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "OrcJITTests",
+      "program": "${workspaceFolder}/build/unittests/ExecutionEngine/Orc/OrcJITTests",
+      "args": [],
+      "cwd": "${workspaceFolder}/build/unittests/ExecutionEngine/Orc"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "SpeculativeJIT",
+      "program": "${workspaceFolder}/build/bin/SpeculativeJIT",
+      "args": [
+        "-num-threads", "2",
+        "-debug", "-debug-only=orc",
+        "test.bc", "tinyexpr.bc", "compile.bc", "free.bc", "eval.bc"
+      ],
+      "cwd": "${workspaceFolder}/llvm/examples/ThinLtoJIT/bc-default"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "tinyexpr",
+      "program": "${workspaceFolder}/build/bin/ThinLtoJIT",
+      "args": [
+        "-debug", "-debug-only=thinltojit",
+        "example.bc", "tinyexpr.bc", "compile.bc", "free.bc", "eval.bc"
+      ],
+      "cwd": "/Users/staefsn/Develop/ThinLtoJIT/examples/tinyexpr/bc-thinlto"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "tinyexpr index",
+      "program": "${workspaceFolder}/build/bin/ThinLtoJIT",
+      "args": [
+        "-debug", "-debug-only=thinltojit", "-print-stats",
+        "-compile-threads=1", "-load-threads=1", "index.thinlto.bc"
+      ],
+      "cwd": "/Users/staefsn/Develop/ThinLtoJIT/examples/tinyexpr/bc-thinlto"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "minimal",
+      "program": "${workspaceFolder}/build/bin/ThinLtoJIT",
+      "args": [
+        "-debug", "-debug-only=thinltojit", "-print-stats",
+        "index.thinlto.bc"
+        //"main.bc", "sub1.bc", "sub2.bc", "sub21.bc", "sub22.bc", "sub23.bc", "workload.bc"
+      ],
+      "cwd": "/Users/staefsn/Develop/ThinLtoJIT/examples/test"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "403.gcc",
+      "program": "${workspaceFolder}/build/bin/ThinLtoJIT",
+      "args": [
+        "-debug", "-debug-only=thinltojit", "index.thinlto.bc", "--args",
+        "-o", "/Users/staefsn/Develop/ThinLtoJIT/examples/403.gcc/bc-thinlto/cccp.s",
+        "/Users/staefsn/Develop/ThinLtoJIT/examples/403.gcc/speccpu2006/403.gcc/data/test/input/cccp.i"
+      ],
+      "cwd": "/Users/staefsn/Develop/ThinLtoJIT/examples/403.gcc/bc-thinlto"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "403.gcc --version",
+      "program": "${workspaceFolder}/build/bin/ThinLtoJIT",
+      "args": [
+        "-debug", "-debug-only=thinltojit", "-print-stats",
+        "-dispatch-compilation=never", "index.thinlto.bc",
+        "--args", "--version"
+      ],
+      "cwd": "/Users/staefsn/Develop/ThinLtoJIT/examples/403.gcc/bc-thinlto"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "lli orc-lazy",
+      "program": "${workspaceFolder}/build/bin/lli",
+      "args": [
+        "-debug", "-debug-only=orc",
+        "-jit-kind=orc-lazy",
+        "-extra-module=tinyexpr.bc",
+        "-extra-module=compile.bc",
+        "-extra-module=free.bc",
+        "-extra-module=eval.bc",
+        "example.bc"
+      ],
+      "cwd": "${workspaceFolder}/llvm/examples/ThinLtoJIT/bc-default"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "lli mcjit",
+      "program": "${workspaceFolder}/build/bin/lli",
+      "args": [
+        "-debug", "-debug-only=orc",
+        "-jit-kind=orc-lazy",
+        "-extra-module=tinyexpr.bc",
+        "-extra-module=compile.bc",
+        "-extra-module=free.bc",
+        "-extra-module=eval.bc",
+        "example.bc"
+      ],
+      "cwd": "${workspaceFolder}/llvm/examples/ThinLtoJIT/bc-default"
+    }
+  ]
+}

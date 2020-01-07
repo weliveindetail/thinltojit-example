@@ -1,0 +1,33 @@
+{
+  "LLVM": {
+    "default": "LLVM",
+    "choices": {
+      "LLVM": {
+        "short": "LLVM",
+        "long": "LLVM",
+        "settings": {
+          "LLVM_TARGETS_TO_BUILD": "host",
+          "LLVM_ENABLE_ABI_BREAKING_CHECKS": "ON",
+          "LLVM_ENABLE_ERROR_TRACING": "ON"
+        }
+      }
+    }
+  },
+  "buildType": {
+    "default": "debug",
+    "choices": {
+      "debug": {
+        "short": "Debug",
+        "long": "Compile in debug mode",
+        "buildType": "Debug",
+        "linkage": "static"
+      },
+      "release": {
+        "short": "RelWithDebInfo",
+        "long": "Compile in release mode with debug info",
+        "buildType": "RelWithDebInfo",
+        "linkage": "static"
+      }
+    }
+  }
+}
