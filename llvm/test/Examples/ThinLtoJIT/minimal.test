@@ -1,0 +1,12 @@
+# RUN: llvm-as %S/Inputs/main.ll -o main.bc
+# RUN: llvm-as %S/Inputs/sub1.ll -o sub1.bc
+# RUN: llvm-as %S/Inputs/sub2.ll -o sub2.bc
+# RUN: llvm-as %S/Inputs/sub21.ll -o sub21.bc
+# RUN: llvm-as %S/Inputs/sub22.ll -o sub22.bc
+# RUN: llvm-as %S/Inputs/sub23.ll -o sub23.bc
+# RUN: llvm-as %S/Inputs/workload.ll -o workload.bc
+# RUN: llvm-lto --thinlto -o index main.bc sub1.bc sub2.bc sub21.bc sub22.bc sub23.bc workload.bc
+# RUN: ThinLtoJIT -print-stats index.thinlto.bc 2>&1 | FileCheck %s
+
+# CHECK: Modules submitted asynchronously: [[#ASYNC:]]
+# CHECK: Modules submitted synchronously: [[#6-ASYNC]]
