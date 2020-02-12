@@ -63,6 +63,7 @@ public:
     virtual void modifyPassConfig(MaterializationResponsibility &MR,
                                   const Triple &TT,
                                   jitlink::PassConfiguration &Config) {}
+
     virtual void notifyLoaded(MaterializationResponsibility &MR) {}
     virtual Error notifyEmitted(MaterializationResponsibility &MR) {
       return Error::success();

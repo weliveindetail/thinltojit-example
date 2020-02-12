@@ -198,6 +198,30 @@ Error LocalCXXRuntimeOverrides::enable(JITDylib &JD,
   return JD.define(absoluteSymbols(std::move(RuntimeInterposes)));
 }
 
+void ItaniumCXAAtExitSupport::registerAtExit(void (*F)(void *), void *Ctx,
+                                             void *DSOHandle) {
+  std::lock_guard<std::mutex> Lock(AtExitsMutex);
+  AtExitRecords[DSOHandle].push_back({F, Ctx});
+}
+
+void ItaniumCXAAtExitSupport::runAtExits(void *DSOHandle) {
+  std::vector<AtExitRecord> AtExitsToRun;
+
+  {
+    std::lock_guard<std::mutex> Lock(AtExitsMutex);
+    auto I = AtExitRecords.find(DSOHandle);
+    if (I != AtExitRecords.end()) {
+      AtExitsToRun = std::move(I->second);
+      AtExitRecords.erase(I);
+    }
+  }
+
+  while (!AtExitsToRun.empty()) {
+    AtExitsToRun.back().F(AtExitsToRun.back().Ctx);
+    AtExitsToRun.pop_back();
+  }
+}
+
 DynamicLibrarySearchGenerator::DynamicLibrarySearchGenerator(
     sys::DynamicLibrary Dylib, char GlobalPrefix, SymbolPredicate Allow)
     : Dylib(std::move(Dylib)), Allow(std::move(Allow)),

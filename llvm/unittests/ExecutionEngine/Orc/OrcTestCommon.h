@@ -93,9 +93,11 @@ public:
 
   SimpleMaterializationUnit(
       orc::SymbolFlagsMap SymbolFlags, MaterializeFunction Materialize,
+      orc::SymbolStringPtr InitSym = nullptr,
       DiscardFunction Discard = DiscardFunction(),
       DestructorFunction Destructor = DestructorFunction())
-      : MaterializationUnit(std::move(SymbolFlags), orc::VModuleKey()),
+      : MaterializationUnit(std::move(SymbolFlags), std::move(InitSym),
+                            orc::VModuleKey()),
         Materialize(std::move(Materialize)), Discard(std::move(Discard)),
         Destructor(std::move(Destructor)) {}
 

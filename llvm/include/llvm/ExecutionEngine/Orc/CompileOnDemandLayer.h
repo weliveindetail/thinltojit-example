@@ -94,6 +94,7 @@ public:
 
   /// Sets the ImplSymbolMap
   void setImplMap(ImplSymbolMap *Imp);
+
   /// Emits the given module. This should not be called by clients: it will be
   /// called by the JIT when a definition added via the add method is requested.
   void emit(MaterializationResponsibility R, ThreadSafeModule TSM) override;
@@ -116,8 +117,6 @@ private:
 
   PerDylibResources &getPerDylibResources(JITDylib &TargetD);
 
-  void cleanUpModule(Module &M);
-
   void expandPartition(GlobalValueSet &Partition);
 
   void emitPartition(MaterializationResponsibility R, ThreadSafeModule TSM,
@@ -130,8 +129,8 @@ private:
   IndirectStubsManagerBuilder BuildIndirectStubsManager;
   PerDylibResourcesMap DylibResources;
   PartitionFunction Partition = compileRequested;
-  SymbolLinkagePromoter PromoteSymbols;
   ImplSymbolMap *AliaseeImpls = nullptr;
+  unsigned NextPromoId = 0;
 };
 
 /// Compile-on-demand layer.

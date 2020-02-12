@@ -113,6 +113,7 @@ TEST_F(CoreAPIsStandardTest, RemoveSymbolsTest) {
         cantFail(R.notifyResolved({{Bar, BarSym}}));
         cantFail(R.notifyEmitted());
       },
+      nullptr,
       [&](const JITDylib &JD, const SymbolStringPtr &Name) {
         EXPECT_EQ(Name, Bar) << "Expected \"Bar\" to be discarded";
         if (Name == Bar)
@@ -126,6 +127,7 @@ TEST_F(CoreAPIsStandardTest, RemoveSymbolsTest) {
   cantFail(JD.define(std::make_unique<SimpleMaterializationUnit>(
       SymbolFlagsMap({{Baz, BazSym.getFlags()}}),
       [&](MaterializationResponsibility R) { BazR.emplace(std::move(R)); },
+      nullptr,
       [](const JITDylib &JD, const SymbolStringPtr &Name) {
         ADD_FAILURE() << "\"Baz\" discarded unexpectedly";
       })));
@@ -838,6 +840,7 @@ TEST_F(CoreAPIsStandardTest, DropMaterializerWhenEmpty) {
       [](MaterializationResponsibility R) {
         llvm_unreachable("Unexpected call to materialize");
       },
+      nullptr,
       [&](const JITDylib &JD, SymbolStringPtr Name) {
         EXPECT_TRUE(Name == Foo || Name == Bar)
             << "Discard of unexpected symbol?";
@@ -872,6 +875,7 @@ TEST_F(CoreAPIsStandardTest, AddAndMaterializeLazySymbol) {
         cantFail(R.notifyEmitted());
         FooMaterialized = true;
       },
+      nullptr,
       [&](const JITDylib &JD, SymbolStringPtr Name) {
         EXPECT_EQ(Name, Bar) << "Expected Name to be Bar";
         BarDiscarded = true;
@@ -920,6 +924,7 @@ TEST_F(CoreAPIsStandardTest, TestBasicWeakSymbolMaterialization) {
         ADD_FAILURE() << "Attempt to materialize Bar from the wrong unit";
         R.failMaterialization();
       },
+      nullptr,
       [&](const JITDylib &JD, SymbolStringPtr Name) {
         EXPECT_EQ(Name, Bar) << "Expected \"Bar\" to be discarded";
         DuplicateBarDiscarded = true;

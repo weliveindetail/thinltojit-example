@@ -138,6 +138,10 @@ public:
     if (!ExtraSymbolsToClaim.empty())
       if (auto Err = MR.defineMaterializing(ExtraSymbolsToClaim))
         return notifyFailed(std::move(Err));
+
+    if (const auto &InitSym = MR.getInitializerSymbol())
+      InternedResult[InitSym] = JITEvaluatedSymbol();
+
     if (auto Err = MR.notifyResolved(InternedResult)) {
       Layer.getExecutionSession().reportError(std::move(Err));
       MR.failMaterialization();
