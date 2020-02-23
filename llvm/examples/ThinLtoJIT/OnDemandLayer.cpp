@@ -159,9 +159,24 @@ void LoadAndEmitWholeModule::materialize(MaterializationResponsibility R) {
                     << R.getSymbols() << "\n");
 #endif
 
-  // TODO: Take responsibility for all symbols in the module. They should
-  // replace all synthetic weak definitions inherited from the
-  // EmitCallThroughStubs unit.
+  // Take responsibility for all symbols in the module. In the JITDylib, this
+  // will replace the synthetic weak definitions inherited from the
+  // EmitCallThroughStubs unit with the definitions parsed from the module.
+  //
+  // Note: The MaterializationResponsibility will keep the old entries, because
+  //       it implicitly drops duplicates upon insert().
+  //
+  // TODO: What happens if the module naturally contains weak definitions?
+  //       So far defineMaterializing() would reject the incoming definition
+  //       and incorrectly keep the existing one. It seems acceptable for now as
+  //       we only replace their flags values under the hood. If we started
+  //       recording other properties for symbols, this would probably break.
+  //       Introducing a 'synthetic' flag may help to fix the ambiguity.
+  //
+  if (Error Err = R.defineMaterializing(std::move(ModuleSymbols))) {
+    Parent.getExecutionSession().reportError(std::move(Err));
+    return;
+  }
 
   static constexpr bool SubmittedAsynchronously = false;
   Parent.emitWholeModule(std::move(R), std::move(TSM), SubmittedAsynchronously);
@@ -296,15 +311,23 @@ void CompileWholeModuleOnDemandLayer::emitStubsOnly(
     Callables[Name] = SymbolAliasMapEntry(Name, Flags);
   }
 
-  // TODO: Create a materialization unit that will load and emit the module. The
-  // reexports that we generate in the end will issue a query on call-through,
-  // which should trigger the actual materialization.
+  // Create a materialization unit that will load and emit the whole module and
+  // lodge it with the shadow dylib. The reexports that we generate in the end
+  // will issue a query into the shadow dylib on call-through. This will trigger
+  // the actual materialization.
+  JITDylibResources &JDR = getJITDylibResources(R.getTargetJITDylib());
+  if (auto Err = JDR.ShadowJD->define(
+          std::make_unique<LoadAndEmitWholeModule>(
+              R.getSymbols(), ModulePath, R.getVModuleKey(), *this))) {
+    getExecutionSession().reportError(std::move(Err));
+    R.failMaterialization();
+    return;
+  }
 
   // No need to track function aliasees.
   constexpr ImplSymbolMap *NoAliaseeImpls = nullptr;
 
   // Emit call-through symbols to main dylib.
-  JITDylibResources &JDR = getJITDylibResources(R.getTargetJITDylib());
   R.replace(lazyReexports(*CallThroughManager, *JDR.ISManager, *JDR.ShadowJD,
                           std::move(Callables), NoAliaseeImpls));
 
@@ -339,15 +362,24 @@ void CompileWholeModuleOnDemandLayer::emitReexports(
       NonCallables[Name] = SymbolAliasMapEntry(Name, Flags);
   }
 
-  // TODO: Create a materialization unit that will emit the whole module. The
-  // reexports that we generate in the end will issue a query on call-through,
-  // which should trigger the actual materialization.
+  // Create a materialization unit that will emit the whole module and lodge it
+  // with the shadow dylib. The reexports that we generate in the end will issue
+  // a query into the shadow dylib on call-through. This will trigger the actual
+  // materialization.
+  JITDylib &JD = R.getTargetJITDylib();
+  static constexpr bool SubmittedFromDiscovery = false;
+  if (auto Err = addWholeModule(JD, std::move(TSM), R.getVModuleKey(),
+                                SubmittedFromDiscovery)) {
+    getExecutionSession().reportError(std::move(Err));
+    R.failMaterialization();
+    return;
+  }
 
   PSTATS("[", ModulePath , "] Start emitting reexports");
 
   // No need to track function aliasees.
   constexpr ImplSymbolMap *NoAliaseeImpls = nullptr;
-  JITDylibResources &JDR = getJITDylibResources(R.getTargetJITDylib());
+  JITDylibResources &JDR = getJITDylibResources(JD);
 
   R.replace(reexports(*JDR.ShadowJD, std::move(NonCallables),
                       JITDylibLookupFlags::MatchAllSymbols));

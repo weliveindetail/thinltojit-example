@@ -832,23 +832,33 @@ JITDylib::defineMaterializing(SymbolFlagsMap SymbolFlags) {
 
       // If the entry already exists...
       if (EntryItr != Symbols.end()) {
+        if (Flags.isWeak()) {
+          // The incoming symbol definition is weak.
+          RejectedWeakDefs.push_back(SFItr);
+          continue;
+        }
 
-        // If this is a strong definition then error out.
-        if (!Flags.isWeak()) {
-          // Remove any symbols already added.
+        if (EntryItr->second.getFlags().isWeak()) {
+          // The existing symbol definition is weak.
+          if (!EntryItr->second.isInMaterializationPhase()) {
+            auto UMII = UnmaterializedInfos.find(Name);
+            assert(UMII != UnmaterializedInfos.end() &&
+                  "Overridden existing def should have an UnmaterializedInfo");
+            UMII->second->MU->doDiscard(*this, Name);
+          }
+          Symbols.erase(EntryItr);
+        } else {
+          // Both definitions are strong. Remove any symbols already added.
           for (auto &SI : AddedSyms)
             Symbols.erase(SI);
 
           // FIXME: Return all duplicates.
           return make_error<DuplicateDefinition>(std::string(*Name));
         }
+      }
 
-        // Otherwise just make a note to discard this symbol after the loop.
-        RejectedWeakDefs.push_back(SFItr);
-        continue;
-      } else
-        EntryItr =
-          Symbols.insert(std::make_pair(Name, SymbolTableEntry(Flags))).first;
+      EntryItr =
+        Symbols.insert(std::make_pair(Name, SymbolTableEntry(Flags))).first;
 
       AddedSyms.push_back(EntryItr);
       EntryItr->second.setState(SymbolState::Materializing);
@@ -1837,24 +1847,24 @@ JITDylib::JITDylib(ExecutionSession &ES, std::string Name)
 Error JITDylib::defineImpl(MaterializationUnit &MU) {
   SymbolNameSet Duplicates;
   std::vector<SymbolStringPtr> ExistingDefsOverridden;
-  std::vector<SymbolStringPtr> MUDefsOverridden;
+  std::vector<SymbolStringPtr> RejectedWeakDefs;
 
   for (const auto &KV : MU.getSymbols()) {
     auto I = Symbols.find(KV.first);
 
     if (I != Symbols.end()) {
-      if (KV.second.isStrong()) {
-        if (I->second.getFlags().isStrong() ||
-            I->second.getState() > SymbolState::NeverSearched)
-          Duplicates.insert(KV.first);
-        else {
-          assert(I->second.getState() == SymbolState::NeverSearched &&
-                 "Overridden existing def should be in the never-searched "
-                 "state");
-          ExistingDefsOverridden.push_back(KV.first);
-        }
-      } else
-        MUDefsOverridden.push_back(KV.first);
+      if (KV.second.isWeak()) {
+        // The incoming symbol definition is weak.
+        RejectedWeakDefs.push_back(KV.first);
+        continue;
+      } else if (I->second.getFlags().isWeak() &&
+                 I->second.getState() == SymbolState::NeverSearched) {
+        // The existing symbol definition is weak and can be overridden.
+        ExistingDefsOverridden.push_back(KV.first);
+      } else {
+        // Both definitions are strong.
+        Duplicates.insert(KV.first);
+      }
     }
   }
 
@@ -1863,7 +1873,7 @@ Error JITDylib::defineImpl(MaterializationUnit &MU) {
     return make_error<DuplicateDefinition>(std::string(**Duplicates.begin()));
 
   // Discard any overridden defs in this MU.
-  for (auto &S : MUDefsOverridden)
+  for (auto &S : RejectedWeakDefs)
     MU.doDiscard(*this, S);
 
   // Discard existing overridden defs.
