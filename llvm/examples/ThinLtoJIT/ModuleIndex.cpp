@@ -425,7 +425,7 @@ ModuleIndex::fetchModuleInfo(const SymbolLookupSet &Symbols,
     if (GlobalValueSummary *S = getSummary(Guid)) {
       ModuleInfo &MI = MIs[S->modulePath()];
 
-      // TODO: Infer symbol flags from the ThinLTO module summary.
+      MI.SymbolFlags[KV.first] = JITSymbolFlags::fromSummary(S);
       MI.Guids.push_back(Guid);
 
       if (!isa<FunctionSummary>(S))
