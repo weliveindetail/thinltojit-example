@@ -17,37 +17,33 @@
 #include <thread>
 #include <vector>
 
+#include "Errors.h"
+#include "ModuleIndex.h"
+#include "OnDemandLayer.h"
+
 namespace llvm {
 namespace orc {
 
-class ThinLtoDiscoveryThread;
-class ThinLtoInstrumentationLayer;
-class ThinLtoModuleIndex;
-
-class CompileOnDemandLayer;
+class CompileWholeModuleOnDemandLayer;
 class IRCompileLayer;
 class RTDyldObjectLinkingLayer;
 
 class JITDylib;
 class JITTargetMachineBuilder;
-class LazyCallThroughManager;
 class MangleAndInterner;
+
+enum class DispatchMaterialization {
+  Never,
+  WholeModules,
+  Always
+};
 
 class ThinLtoJIT {
 public:
-  using AddModuleFunction = std::function<Error(ThreadSafeModule)>;
-
-  enum ExplicitMemoryBarrier {
-    NeverFence = 0,
-    FenceStaticCode = 1,
-    FenceJITedCode = 2,
-    AlwaysFence = 3
-  };
-
   ThinLtoJIT(ArrayRef<std::string> InputFiles, StringRef MainFunctionName,
+             DispatchMaterialization DispatchPolicy,
              unsigned LookaheadLevels, unsigned NumCompileThreads,
-             unsigned NumLoadThreads, unsigned DiscoveryFlagsPerBucket,
-             ExplicitMemoryBarrier MemFence, bool AllowNudgeIntoDiscovery,
+             unsigned NumLoadThreads, unsigned NumDiscoveryThreads,
              bool PrintStats, Error &Err);
   ~ThinLtoJIT();
 
@@ -56,15 +52,20 @@ public:
   ThinLtoJIT(ThinLtoJIT &&) = delete;
   ThinLtoJIT &operator=(ThinLtoJIT &&) = delete;
 
-  Expected<int> main(ArrayRef<std::string> Args) {
-    auto MainSym = ES.lookup({MainJD}, MainFunctionMangled);
-    if (!MainSym)
-      return MainSym.takeError();
+  using MainFunctionType = int(int, char *[]);
 
-    using MainFn = int(int, char *[]);
-    auto Main = jitTargetAddressToFunction<MainFn *>(MainSym->getAddress());
+  template <typename FunctionType = MainFunctionType>
+  Expected<int> call(StringRef EntryPoint, ArrayRef<std::string> Args) {
+    SymbolStringPtr MangledName = (*Mangle)(EntryPoint);
 
-    return runAsMain(Main, Args, StringRef("ThinLtoJIT"));
+    auto Symbol = ES.lookup({MainJD}, MangledName);
+    if (!Symbol)
+      return Symbol.takeError();
+
+    JITTargetAddress Addr = Symbol->getAddress();
+    auto Ptr = jitTargetAddressToFunction<FunctionType *>(Addr);
+
+    return runAsMain(Ptr, Args, StringRef("ThinLtoJIT"));
   }
 
 private:
@@ -72,32 +73,46 @@ private:
   DataLayout DL{""};
 
   JITDylib *MainJD;
-  SymbolStringPtr MainFunctionMangled;
+  std::unique_ptr<ModuleIndex> GlobalIndex;
   std::unique_ptr<ThreadPool> CompileThreads;
-  std::unique_ptr<ThinLtoModuleIndex> GlobalIndex;
+  std::unique_ptr<ThreadPool> DiscoveryThreads;
 
-  AddModuleFunction AddModule;
   std::unique_ptr<RTDyldObjectLinkingLayer> ObjLinkingLayer;
   std::unique_ptr<IRCompileLayer> CompileLayer;
-  std::unique_ptr<ThinLtoInstrumentationLayer> InstrumentationLayer;
-  std::unique_ptr<CompileOnDemandLayer> OnDemandLayer;
-
-  std::atomic<bool> JitRunning;
-  std::thread DiscoveryThread;
-  std::unique_ptr<ThinLtoDiscoveryThread> DiscoveryThreadWorker;
+  std::unique_ptr<CompileWholeModuleOnDemandLayer> OnDemandLayer;
 
   std::unique_ptr<MangleAndInterner> Mangle;
-  std::unique_ptr<LazyCallThroughManager> CallThroughManager;
 
-  void setupLayers(JITTargetMachineBuilder JTMB, unsigned NumCompileThreads,
-                   unsigned DiscoveryFlagsPerBucket,
-                   ExplicitMemoryBarrier MemFence);
-  Error setupJITDylib(JITDylib *JD, bool AllowNudge, bool PrintStats);
-  void setupDiscovery(JITDylib *MainJD, unsigned LookaheadLevels,
-                      bool PrintStats);
-  Expected<ThreadSafeModule> setupMainModule(StringRef MainFunction);
-  Expected<JITTargetMachineBuilder> setupTargetUtils(Module *M);
-  Error applyDataLayout(Module *M);
+  void setupCompilePipeline(JITTargetMachineBuilder JTMB,
+                            unsigned NumCompileThreads,
+                            unsigned NumDiscoveryThreads,
+                            unsigned LookaheadLevels,
+                            DispatchMaterialization DispatchPolicy);
+
+  Error setupJITDylib(JITDylib *JD, bool PrintStats);
+
+  Expected<JITTargetMachineBuilder> setupTargetUtils(ThreadSafeModule &TSM);
+  Error applyDataLayout(ThreadSafeModule &TSM);
+  Error applyDataLayout(Module &M);
+
+  using FetchModuleResult = ModuleIndex::FetchModuleResult;
+  using ModuleInfo = ModuleIndex::ModuleInfo;
+
+  Error submitWholeModuleBlocking(FetchModuleResult R, bool &NotReady);
+  Error submitReexportsBlocking(FetchModuleResult R);
+  Error submitCallThroughStubs(StringRef ModulePath, ModuleInfo MI);
+
+  Error runDiscovery(FunctionSummary *Origin, StringRef MangledName,
+                     unsigned LookaheadLevels);
+
+  Error generateMissingSymbolsBlocking(
+      LookupKind K, JITDylib &JD, const SymbolLookupSet &Symbols);
+
+  ExecutionSession::DispatchMaterializationFunction
+  createThreadPoolDispatcher(DispatchMaterialization DispatchPolicy);
+
+  void dispatchToThreadpool(JITDylib &JD,
+                            std::unique_ptr<MaterializationUnit> MU);
 
   static void exitOnLazyCallThroughFailure() {
     errs() << "Compilation failed. Aborting.\n";

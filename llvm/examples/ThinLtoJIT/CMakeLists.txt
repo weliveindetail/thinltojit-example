@@ -11,8 +11,11 @@ set(LLVM_LINK_COMPONENTS
 
 add_llvm_example(ThinLtoJIT
   main.cpp
+  Errors.cpp
+  ModuleIndex.cpp
+  OnDemandLayer.cpp
+  StatsUtils.cpp
   ThinLtoJIT.cpp
-  ThinLtoModuleIndex.cpp
-  ThinLtoInstrumentationLayer.cpp
-  ThinLtoDiscoveryThread.cpp
   )
+
+target_compile_definitions(ThinLtoJIT PRIVATE -DTHINLTOJIT_STATS)
