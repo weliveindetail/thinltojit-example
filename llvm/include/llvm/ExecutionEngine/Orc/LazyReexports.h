@@ -51,7 +51,21 @@ protected:
                          JITTargetAddress ErrorHandlerAddr,
                          std::unique_ptr<TrampolinePool> TP);
 
-  JITTargetAddress callThroughToSymbol(JITTargetAddress TrampolineAddr);
+  struct ReexportsEntry {
+    JITDylib *SourceJD;
+    SymbolStringPtr SymbolName;
+  };
+
+  Expected<ReexportsEntry> findReexport(JITTargetAddress TrampolineAddr);
+  Expected<JITTargetAddress> resolveSymbol(const ReexportsEntry &RE);
+
+  Error notifyResolved(JITTargetAddress TrampolineAddr,
+                       JITTargetAddress ResolvedAddr);
+
+  JITTargetAddress reportCallThroughError(Error Err) {
+    ES.reportError(std::move(Err));
+    return ErrorHandlerAddr;
+  }
 
   void setTrampolinePool(std::unique_ptr<TrampolinePool> TP) {
     this->TP = std::move(TP);
@@ -59,7 +73,7 @@ protected:
 
 private:
   using ReexportsMap =
-      std::map<JITTargetAddress, std::pair<JITDylib *, SymbolStringPtr>>;
+      std::map<JITTargetAddress, ReexportsEntry>;
 
   using NotifiersMap = std::map<JITTargetAddress, NotifyResolvedFunction>;
 
@@ -81,7 +95,18 @@ private:
   template <typename ORCABI> Error init() {
     auto TP = LocalTrampolinePool<ORCABI>::Create(
         [this](JITTargetAddress TrampolineAddr) {
-          return callThroughToSymbol(TrampolineAddr);
+          auto Entry = findReexport(TrampolineAddr);
+          if (!Entry)
+            return reportCallThroughError(Entry.takeError());
+
+          auto ResolvedAddr = resolveSymbol(std::move(*Entry));
+          if (!ResolvedAddr)
+            return reportCallThroughError(ResolvedAddr.takeError());
+
+          if (Error Err = notifyResolved(TrampolineAddr, *ResolvedAddr))
+            return reportCallThroughError(std::move(Err));
+
+          return *ResolvedAddr;
         });
 
     if (!TP)

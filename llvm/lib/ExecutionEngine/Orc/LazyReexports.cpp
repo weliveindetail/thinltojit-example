@@ -30,36 +30,38 @@ Expected<JITTargetAddress> LazyCallThroughManager::getCallThroughTrampoline(
   if (!Trampoline)
     return Trampoline.takeError();
 
-  Reexports[*Trampoline] = std::make_pair(&SourceJD, std::move(SymbolName));
+  Reexports[*Trampoline] = ReexportsEntry{&SourceJD, std::move(SymbolName)};
   Notifiers[*Trampoline] = std::move(NotifyResolved);
   return *Trampoline;
 }
 
-JITTargetAddress
-LazyCallThroughManager::callThroughToSymbol(JITTargetAddress TrampolineAddr) {
-  JITDylib *SourceJD = nullptr;
-  SymbolStringPtr SymbolName;
+Expected<LazyCallThroughManager::ReexportsEntry>
+LazyCallThroughManager::findReexport(JITTargetAddress TrampolineAddr) {
+  std::lock_guard<std::mutex> Lock(LCTMMutex);
+  auto I = Reexports.find(TrampolineAddr);
+  if (I == Reexports.end())
+    return createStringError(inconvertibleErrorCode(),
+                             "Missing reexport for trampoline address %p",
+                             TrampolineAddr);
 
-  {
-    std::lock_guard<std::mutex> Lock(LCTMMutex);
-    auto I = Reexports.find(TrampolineAddr);
-    if (I == Reexports.end())
-      return ErrorHandlerAddr;
-    SourceJD = I->second.first;
-    SymbolName = I->second.second;
-  }
+  assert(Notifiers.find(TrampolineAddr) != Notifiers.end());
+  return I->second;
+}
 
+Expected<JITTargetAddress>
+LazyCallThroughManager::resolveSymbol(const ReexportsEntry &RE) {
   auto LookupResult = ES.lookup(
-      makeJITDylibSearchOrder(SourceJD, JITDylibLookupFlags::MatchAllSymbols),
-      SymbolName, SymbolState::Ready);
+      makeJITDylibSearchOrder(RE.SourceJD, JITDylibLookupFlags::MatchAllSymbols),
+      RE.SymbolName, SymbolState::Ready);
 
-  if (!LookupResult) {
-    ES.reportError(LookupResult.takeError());
-    return ErrorHandlerAddr;
-  }
+  if (!LookupResult)
+    return LookupResult.takeError();
 
-  auto ResolvedAddr = LookupResult->getAddress();
+  return LookupResult->getAddress();
+}
 
+Error LazyCallThroughManager::notifyResolved(JITTargetAddress TrampolineAddr,
+                                             JITTargetAddress ResolvedAddr) {
   NotifyResolvedFunction NotifyResolved;
   {
     std::lock_guard<std::mutex> Lock(LCTMMutex);
@@ -70,14 +72,7 @@ LazyCallThroughManager::callThroughToSymbol(JITTargetAddress TrampolineAddr) {
     }
   }
 
-  if (NotifyResolved) {
-    if (auto Err = NotifyResolved(ResolvedAddr)) {
-      ES.reportError(std::move(Err));
-      return ErrorHandlerAddr;
-    }
-  }
-
-  return ResolvedAddr;
+  return NotifyResolved ? NotifyResolved(ResolvedAddr) : Error::success();
 }
 
 Expected<std::unique_ptr<LazyCallThroughManager>>

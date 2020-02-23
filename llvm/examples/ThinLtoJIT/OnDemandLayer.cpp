@@ -239,15 +239,30 @@ public:
 
 JITTargetAddress NotifyingCallThroughManager::callThroughToSymbol(
     JITTargetAddress TrampolineAddr) {
-  // TODO: Allow derived classes to find the reexports entry for TrampolineAddr
+  auto Entry = findReexport(TrampolineAddr);
+  if (!Entry)
+    return reportCallThroughError(Entry.takeError());
+
+  PSTATS("[Call-through to ", *Entry->SymbolName , "] Found reexport");
 
   // Kick-off discovery from here
   if (NotifyCallThroughToSymbol) {
-    NotifyCallThroughToSymbol(SymbolStringPtr());
+    NotifyCallThroughToSymbol(Entry->SymbolName);
   }
 
-  // TODO: Allow derived classes to resolve the call-through.
-  return JITTargetAddress();
+  PSTATS("[Call-through to ", *Entry->SymbolName , "] Kicked-off discovery");
+
+  auto ResolvedAddr = resolveSymbol(*Entry);
+  if (!ResolvedAddr)
+    return reportCallThroughError(ResolvedAddr.takeError());
+
+  PSTATS("[Call-through to ", *Entry->SymbolName , "] Resolved address");
+
+  if (Error Err = notifyResolved(TrampolineAddr, *ResolvedAddr))
+    return reportCallThroughError(std::move(Err));
+
+  PSTATS("[Call-through to ", *Entry->SymbolName , "] Returning");
+  return *ResolvedAddr;
 }
 
 CompileWholeModuleOnDemandLayer::CompileWholeModuleOnDemandLayer(
