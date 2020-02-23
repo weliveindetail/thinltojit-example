@@ -50,7 +50,7 @@ public:
     JITDylibSearchOrder SearchOrder;
     MR.getTargetJITDylib().withSearchOrderDo(
         [&](const JITDylibSearchOrder &JDs) { SearchOrder = JDs; });
-    ES.lookup(LookupKind::Static, SearchOrder, InternedSymbols,
+    ES.lookup(LookupKind::TransitiveStatic, SearchOrder, InternedSymbols,
               SymbolState::Resolved, std::move(OnResolvedWithUnwrap),
               RegisterDependencies);
   }

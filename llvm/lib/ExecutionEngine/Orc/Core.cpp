@@ -225,6 +225,8 @@ raw_ostream &operator<<(raw_ostream &OS, const LookupKind &K) {
     return OS << "Static";
   case LookupKind::DLSym:
     return OS << "DLSym";
+  case LookupKind::TransitiveStatic:
+    return OS << "TransitiveStatic";
   }
   llvm_unreachable("Invalid lookup kind");
 }

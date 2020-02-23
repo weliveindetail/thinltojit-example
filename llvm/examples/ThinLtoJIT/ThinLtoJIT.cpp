@@ -362,9 +362,13 @@ Error ThinLtoJIT::generateMissingSymbolsBlocking(
   ModuleNames RemainingPaths;
   for (auto &KV : ModuleInfoMap) {
     StringRef Path = KV.first();
-    // TODO: Allow to distinguish regular static lookups from lookups for
-    // transitive dependencies issued by the linker.
-    RemainingPaths.push_back(Path);
+    ModuleInfo &MI = KV.second;
+    if (K == LookupKind::TransitiveStatic && MI.AllCallable) {
+      if (Error Err = submitCallThroughStubs(Path, std::move(MI)))
+        return Err;
+    } else {
+      RemainingPaths.push_back(Path);
+    }
   }
 
   // For direct requests and transitive data dependencies, emit reexports.

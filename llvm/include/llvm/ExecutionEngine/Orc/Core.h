@@ -86,7 +86,7 @@ enum class SymbolLookupFlags { RequiredSymbol, WeaklyReferencedSymbol };
 ///
 /// DLSym -- Lookup is being performed as-if at runtime (e.g. generators
 ///          representing static archives should not pull in new definitions).
-enum class LookupKind { Static, DLSym };
+enum class LookupKind { Static, DLSym, TransitiveStatic };
 
 /// A list of (JITDylib*, JITDylibLookupFlags) pairs to be used as a search
 /// order during symbol lookup.
