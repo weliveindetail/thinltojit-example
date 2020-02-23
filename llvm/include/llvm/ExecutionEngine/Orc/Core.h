@@ -985,6 +985,7 @@ private:
     bool isInMaterializationPhase() const {
       return getState() == SymbolState::Materializing ||
              getState() == SymbolState::Resolved ||
+             getState() == SymbolState::Emitted ||
              getState() == SymbolState::Ready;
     }
 
