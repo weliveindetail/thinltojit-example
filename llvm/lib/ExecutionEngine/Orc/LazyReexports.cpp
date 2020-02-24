@@ -128,19 +128,8 @@ StringRef LazyReexportsMaterializationUnit::getName() const {
 
 void LazyReexportsMaterializationUnit::materialize(
     MaterializationResponsibility R) {
-  auto RequestedSymbols = R.getRequestedSymbols();
-
-  SymbolAliasMap RequestedAliases;
-  for (auto &RequestedSymbol : RequestedSymbols) {
-    auto I = CallableAliases.find(RequestedSymbol);
-    assert(I != CallableAliases.end() && "Symbol not found in alias map?");
-    RequestedAliases[I->first] = std::move(I->second);
-    CallableAliases.erase(I);
-  }
-
-  if (!CallableAliases.empty())
-    R.replace(lazyReexports(LCTManager, ISManager, SourceJD,
-                            std::move(CallableAliases), AliaseeTable));
+  // On request emit all aliases in this unit.
+  SymbolAliasMap RequestedAliases = std::move(CallableAliases);
 
   IndirectStubsManager::StubInitsMap StubInits;
   for (auto &Alias : RequestedAliases) {
